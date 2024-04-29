@@ -10,14 +10,10 @@ from enum import Enum
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
-from constants import BCHOC_FILE_PATH
+from constants import BCHOC_FILE_PATH, Owner, is_valid_password
 
 
-class Owner(Enum):
-    POLICE = 0
-    LAWYER = 1
-    ANALYST = 2
-    EXECUTIVE = 3
+
 
 
 class BlockState(Enum):
@@ -58,7 +54,7 @@ class Block:
         
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
         block_instance.sha_256_hash = fields[0].hex() if fields[0] != b'\x00' * 32 else None
-        block_instance.time = maya.MayaDT(fields[1])
+        block_instance.time = maya.MayaDT(fields[1]) if fields[1] != b'\x00' * 8 else None
         block_instance.case_uuid = uuid.UUID(bytes=fields[2]) if fields[2] != b'\x00' * 32 else None
         block_instance.evidence_item_id = fields[3] if fields[3] != b'\x00' * 32 else None
         block_instance.state = BlockState.from_name(fields[4].decode('utf-8').strip('\x00'))
@@ -72,19 +68,13 @@ class Block:
     def __len__(self) -> int:
         return 144 + self.data_length
 
-<<<<<<< HEAD
-
-    def to_bytes(self) -> bytes:
-        # handle None fields before packing 
-=======
     def _to_bytes(self) -> bytes:
         # Before packing, ensure that all None fields are appropriately handled.
->>>>>>> c856322b7efc7e20952ac907c0ec6b0e70744f7b
         # For UUID and hashes, convert to bytes, for others use empty strings.
         byte_data = struct.pack(
             '32s d 32s 32s 12s 12s 12s I',
             bytes.fromhex(self.sha_256_hash) if self.sha_256_hash else b'\x00' * 32,
-            self.time.epoch,
+            self.time.epoch if self.time else 0,
             self.case_uuid.bytes if self.case_uuid else b'\x00' * 32,
             self.encrypt_data(str(self.evidence_item_id).encode('utf-8')) if self.evidence_item_id else b'\x00' * 32,
             self.state.name.encode('utf-8').ljust(12, b'\x00'),
@@ -165,7 +155,11 @@ class BlockChain:
     def add(self, case_id, item_ids, creator, password):
         # Verify data
         if not case_id or not item_ids or not creator or not password:
-            print('Wrong parameters to add!')
+            print('Wrong parameters passed to add!')
+            exit(1)
+
+        if not is_valid_password(password):
+            print('Invalid password')
             exit(1)
 
         # Make sure all item id's are unique
@@ -192,6 +186,7 @@ class BlockChain:
             b.data = "No data"
             b.refresh()
             self.blocks.append(b)
+            print(f'Added item: {i_id}\nStatus: CHECKEDIN\nTime of action: {b.time.iso8601()}Z')
 
         self._save()
         
@@ -227,11 +222,7 @@ def parse_command_line():
         # blockchain.verify()
         pass
     elif args.command == 'add':
-<<<<<<< HEAD
-        handle_add(args.case_id, args.item_id, args.creator, password)
-=======
         blockchain.add(args.case_id, args.item_id, args.creator, args.password)
->>>>>>> c856322b7efc7e20952ac907c0ec6b0e70744f7b
     else:
         parser.print_help()
 
