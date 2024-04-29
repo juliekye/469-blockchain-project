@@ -179,7 +179,7 @@ def parse_command_line():
         pass
     elif args.command == 'add':
         password = args.password if args.password else getpass('Password:')
-        handle_add(args.case_id, args.item_id, args.creator, password)
+        blockchain.add(args.case_id, args.item_id, args.creator, password)
     else:
         parser.print_help()
 
