@@ -246,7 +246,8 @@ class BlockChain:
         for b in self.blocks[::-1]:
             if item_id == b.evidence_item_id:
                 if b.state == BlockState.CHECKEDIN:
-                    return print('Item is already checked in!')
+                    print('Item is already checked in!')
+                    exit(1)
                 if b.state != BlockState.CHECKEDOUT:
                     print('Item must be checked in!')
                     exit(1)
