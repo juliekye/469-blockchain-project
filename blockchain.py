@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import hashlib
 import os
@@ -10,7 +11,7 @@ from enum import Enum
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
-from constants import BCHOC_FILE_PATH, Owner, is_valid_password
+from constants import AES_KEY, BCHOC_FILE_PATH, BCHOC_PASSWORD_CREATOR, Owner, get_owner, is_valid_password
 
 
 
@@ -42,10 +43,10 @@ class Block:
         self.creator = None
         self.owner = None
         self.data_length = 14
-        self.data = "Initial block"
+        self.data = "Initial block\x00"
         
         self.password: str = None
-        self.byte_data: bytes = None
+        self.byte_data: bytes = self._to_bytes()
 
     @classmethod
     def from_bytes(cls, byte_data: bytes):
@@ -73,7 +74,7 @@ class Block:
         # For UUID and hashes, convert to bytes, for others use empty strings.
         byte_data = struct.pack(
             '32s d 32s 32s 12s 12s 12s I',
-            bytes.fromhex(self.sha_256_hash) if self.sha_256_hash else b'\x00' * 32,
+            self.sha_256_hash if self.sha_256_hash else b'\x00' * 32,
             self.time.epoch if self.time else 0,
             self.case_uuid.bytes if self.case_uuid else b'\x00' * 32,
             self.encrypt_data(str(self.evidence_item_id).encode('utf-8')) if self.evidence_item_id else b'\x00' * 32,
@@ -93,12 +94,12 @@ class Block:
         return self.byte_data
 
     def encrypt_data(self, data: bytes) -> bytes:
-        cipher = AES.new(self.password.encode('utf-8'), AES.MODE_ECB)
+        cipher = AES.new(AES_KEY, AES.MODE_ECB)
         encrypted_data = cipher.encrypt(pad(data, AES.block_size))
         return encrypted_data
 
     def decrypt_data(self, encrypted_data: bytes) -> bytes:
-        cipher = AES.new(self.password.encode('utf-8'), AES.MODE_ECB)
+        cipher = AES.new(AES_KEY, AES.MODE_ECB)
         decrypted_data = unpad(cipher.decrypt(encrypted_data), AES.block_size)
         return decrypted_data
     
@@ -158,7 +159,7 @@ class BlockChain:
             print('Wrong parameters passed to add!')
             exit(1)
 
-        if not is_valid_password(password):
+        if password.encode('utf-8') != BCHOC_PASSWORD_CREATOR:
             print('Invalid password')
             exit(1)
 
@@ -177,47 +178,41 @@ class BlockChain:
             b = Block()
             b.sha_256_hash = self.blocks[-1].compute_hash()
             b.password = password
-            b.case_uuid = case_id
+            b.case_uuid = uuid.UUID(case_id)
             b.evidence_item_id = i_id
             b.state = BlockState.CHECKEDIN
             b.creator = creator
-            b.owner = Owner.POLICE
-            b.data_length = 7
             b.data = "No data"
+            b.data_length = len(b.data)
             b.refresh()
             self.blocks.append(b)
-            print(f'Added item: {i_id}\nStatus: CHECKEDIN\nTime of action: {b.time.iso8601()}Z')
+            print(f'Added item: {i_id}\nStatus: CHECKEDIN\nTime of action: {b.time.iso8601()}')
 
         self._save()
-        
-
-
 
 
 def parse_command_line():
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest='command', help='sub-command help')
+    parser = argparse.ArgumentParser(description="Blockchain Command Line Interface")
 
-    # Parser for 'init' command
-    subparsers.add_parser('init', help='initialize the blockchain')
+    # Create a subparsers object for handling subcommands
+    subparsers = parser.add_subparsers(dest='command', required=True, help='Available commands')
 
-    # Parser for 'verify' command
-    subparsers.add_parser('verify', help='verify the blockchain')
-
-    # Parser for 'add' command
+    # Parser for the 'add' command
     parser_add = subparsers.add_parser('add', help='add a new item to the blockchain')
     parser_add.add_argument('-c', '--case_id', required=True, help='Case ID')
     parser_add.add_argument('-i', '--item_id', action='append', type=int, required=True, help='Item ID(s)')
-    parser_add.add_argument('-o', '--creator', required=True, help="Creator's name")
+    parser_add.add_argument('-g', '--creator', required=True, help="Creator's name")
     parser_add.add_argument('-p', '--password', help="Creator's password")
 
+    # Parse the command line arguments
     args = parser.parse_args()
 
     blockchain = BlockChain()
+    msg = blockchain.init_blockchain()
 
     # Call the appropriate handler based on the command
     if args.command == 'init':
-        print(blockchain.init_blockchain())
+        print(msg)
     elif args.command == 'verify':
         # blockchain.verify()
         pass
@@ -231,5 +226,6 @@ if __name__ == '__main__':
     try:
         parse_command_line()
     except:
+        print(traceback.print_exc())
         print('An unexpected error occurred!')
         exit(1)
