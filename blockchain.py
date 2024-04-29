@@ -10,7 +10,7 @@ from enum import Enum
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
-from constants import AES_KEY, BCHOC_FILE_PATH
+from constants import BCHOC_FILE_PATH
 
 
 class Owner(Enum):
@@ -33,6 +33,7 @@ class BlockState(Enum):
     DISPOSED = 'DISPOSED'
     DESTROYED = 'DESTROYED'
     RELEASED = 'RELEASED'
+    
 
 
 class Block:
@@ -46,10 +47,14 @@ class Block:
         self.owner = None
         self.data_length = 14
         self.data = "Initial block"
+        
+        self.password: str = None
+        self.byte_data: bytes = None
 
     @classmethod
     def from_bytes(cls, byte_data: bytes):
         block_instance = cls()
+        block_instance.byte_data = byte_data
         
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
         block_instance.sha_256_hash = fields[0].hex() if fields[0] != b'\x00' * 32 else None
@@ -67,9 +72,14 @@ class Block:
     def __len__(self) -> int:
         return 144 + self.data_length
 
+<<<<<<< HEAD
 
     def to_bytes(self) -> bytes:
         # handle None fields before packing 
+=======
+    def _to_bytes(self) -> bytes:
+        # Before packing, ensure that all None fields are appropriately handled.
+>>>>>>> c856322b7efc7e20952ac907c0ec6b0e70744f7b
         # For UUID and hashes, convert to bytes, for others use empty strings.
         byte_data = struct.pack(
             '32s d 32s 32s 12s 12s 12s I',
@@ -84,18 +94,29 @@ class Block:
         )
         byte_data += self.data.encode('utf-8')  
         return byte_data
+    
+    def refresh(self):
+        """Every time a data is refreshed - this method shuold be called"""
+        self.byte_data = self._to_bytes()
 
-    @staticmethod
-    def encrypt_data(data: bytes) -> bytes:
-        cipher = AES.new(AES_KEY, AES.MODE_ECB)
+    def to_bytes(self):
+        return self.byte_data
+
+    def encrypt_data(self, data: bytes) -> bytes:
+        cipher = AES.new(self.password.encode('utf-8'), AES.MODE_ECB)
         encrypted_data = cipher.encrypt(pad(data, AES.block_size))
         return encrypted_data
 
-    @staticmethod
-    def decrypt_data(encrypted_data: bytes) -> bytes:
-        cipher = AES.new(AES_KEY, AES.MODE_ECB)
+    def decrypt_data(self, encrypted_data: bytes) -> bytes:
+        cipher = AES.new(self.password.encode('utf-8'), AES.MODE_ECB)
         decrypted_data = unpad(cipher.decrypt(encrypted_data), AES.block_size)
         return decrypted_data
+    
+    def compute_hash(self) -> bytes:
+        """
+        Generates sha256 hash of a given block, returns bytes
+        """
+        return hashlib.sha256(self.to_bytes()).digest()
     
 
 class BlockChain:
@@ -141,6 +162,40 @@ class BlockChain:
         with open(self.path, 'wb') as f:
             f.write(bytes_data)
 
+    def add(self, case_id, item_ids, creator, password):
+        # Verify data
+        if not case_id or not item_ids or not creator or not password:
+            print('Wrong parameters to add!')
+            exit(1)
+
+        # Make sure all item id's are unique
+        if any(b.evidence_item_id == i_id for b in self.blocks for i_id in item_ids):
+            print('All item ids must be unique!')
+            exit(1)
+
+        # Duplicates in item_ids
+        if len(set(item_ids)) != len(item_ids):
+            print('Duplicate item ids received!')
+            exit(1)
+
+        # Add new blocks
+        for i_id in item_ids:
+            b = Block()
+            b.sha_256_hash = self.blocks[-1].compute_hash()
+            b.password = password
+            b.case_uuid = case_id
+            b.evidence_item_id = i_id
+            b.state = BlockState.CHECKEDIN
+            b.creator = creator
+            b.owner = Owner.POLICE
+            b.data_length = 7
+            b.data = "No data"
+            b.refresh()
+            self.blocks.append(b)
+
+        self._save()
+        
+
 
 
 
@@ -172,10 +227,18 @@ def parse_command_line():
         # blockchain.verify()
         pass
     elif args.command == 'add':
+<<<<<<< HEAD
         handle_add(args.case_id, args.item_id, args.creator, password)
+=======
+        blockchain.add(args.case_id, args.item_id, args.creator, args.password)
+>>>>>>> c856322b7efc7e20952ac907c0ec6b0e70744f7b
     else:
         parser.print_help()
 
 
 if __name__ == '__main__':
-    parse_command_line()
+    try:
+        parse_command_line()
+    except:
+        print('An unexpected error occurred!')
+        exit(1)
