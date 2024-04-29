@@ -47,14 +47,43 @@ class Block:
         self.data_length = 14
         self.data = "Initial block"
 
-    def calculate_hash(self):
-        hash_data = str(self.time) + str(self.case_uuid) + str(self.evidence_item_id) + \
-                    self.state.value + self.creator + self.owner.value + self.data
-        self.sha_256_hash = hashlib.sha256(hash_data.encode()).hexdigest()
-
+    @classmethod
+    def from_bytes(cls, byte_data: bytes):
+        block_instance = cls()
+        
+        fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
+        block_instance.sha_256_hash = fields[0].hex() if fields[0] != b'\x00' * 32 else None
+        block_instance.time = maya.MayaDT(fields[1])
+        block_instance.case_uuid = uuid.UUID(bytes=fields[2]) if fields[2] != b'\x00' * 32 else None
+        block_instance.evidence_item_id = fields[3] if fields[3] != b'\x00' * 32 else None
+        block_instance.state = BlockState.from_name(fields[4].decode('utf-8').strip('\x00'))
+        block_instance.creator = fields[5].decode('utf-8').strip('\x00') if fields[5] != b'\x00' * 12 else None
+        block_instance.owner = Owner(fields[6].decode('utf-8').strip('\x00')) if fields[6] != b'\x00' * 12 else None
+        block_instance.data_length = fields[7]
+        block_instance.data = byte_data[144:144 + block_instance.data_length].decode('utf-8')
+        
+        return block_instance
+    
     def __len__(self) -> int:
         return 144 + self.data_length
 
+
+    def to_bytes(self) -> bytes:
+        # handle None fields before packing 
+        # For UUID and hashes, convert to bytes, for others use empty strings.
+        byte_data = struct.pack(
+            '32s d 32s 32s 12s 12s 12s I',
+            bytes.fromhex(self.sha_256_hash) if self.sha_256_hash else b'\x00' * 32,
+            self.time.epoch,
+            self.case_uuid.bytes if self.case_uuid else b'\x00' * 32,
+            self.encrypt_data(str(self.evidence_item_id).encode('utf-8')) if self.evidence_item_id else b'\x00' * 32,
+            self.state.name.encode('utf-8').ljust(12, b'\x00'),
+            self.creator.encode('utf-8').ljust(12, b'\x00') if self.creator else b'\x00' * 12,
+            self.owner.name.encode('utf-8').ljust(12, b'\x00') if self.owner else b'\x00' * 12,
+            self.data_length
+        )
+        byte_data += self.data.encode('utf-8')  
+        return byte_data
 
     @staticmethod
     def encrypt_data(data: bytes) -> bytes:
@@ -73,32 +102,46 @@ class BlockChain:
     def __init__(self, path: str = BCHOC_FILE_PATH):
         self.path = path
         self.blocks: list[Block] = []
-        self.init_blockchain()
 
-    def init_blockchain(self):
-        if not os.path.exists(self.path):
-            # Create the initial block
-            initial_block = Block()
-            initial_block.calculate_hash()
-            self.blocks.append(initial_block)
-            self.save()
-            print("Blockchain initialized with INITIAL block.")
+    def init_blockchain(self) -> str:
+        if os.path.exists(self.path):
+            self._read()
+            return 'Blockchain file found with INITIAL block.'
         else:
-            print("Blockchain already initialized.")
-            self.load()
+            self.blocks.append(Block())
+            self._save()
+            return 'Blockchain file not found. Created INITIAL block.'
+        
 
-    def save(self):
-        with open(self.path, 'w') as f:
-            for block in self.blocks:
-                f.write(f"{block.__dict__}\n")  # Simplified storage format
+    def verify(self) -> str:
+        Txs = 0
+        observed_hashes = []
+        expected_hashes = []
+        for b in self.blocks:
+            Txs += 1
+            observed_hashes.append(hashlib.sha256(b.to_bytes()).hexdigest())
+            expected_hashes.append(b.sha_256_hash)
 
-    def load(self):
-        with open(self.path, 'r') as f:
-            for line in f:
-                block_data = eval(line.strip())
-                block = Block()
-                block.__dict__.update(block_data)
-                self.blocks.append(block)
+        print(f'Transactions in blockchain: {Txs}')
+        
+        
+        
+    def _read(self):
+        with open(self.path, 'rb') as f:
+            data = f.read() # read all bytes
+        
+        while data:
+            b = Block.from_bytes(data)
+            self.blocks.append(b)
+            data = data[len(b):]
+    
+
+    def _save(self):
+        bytes_data = b''.join(map(lambda b: b.to_bytes(), self.blocks)) # convert to bytes
+        with open(self.path, 'wb') as f:
+            f.write(bytes_data)
+
+
 
 
 def parse_command_line():
@@ -124,14 +167,12 @@ def parse_command_line():
 
     # Call the appropriate handler based on the command
     if args.command == 'init':
-        message = blockchain.init_blockchain()
-        print(message)
+        print(blockchain.init_blockchain())
     elif args.command == 'verify':
         # blockchain.verify()
         pass
     elif args.command == 'add':
-        #password = args.password if args.password else getpass('Password:')
-        handle_add(args.case_id, args.item_id, args.creator, args.password)
+        handle_add(args.case_id, args.item_id, args.creator, password)
     else:
         parser.print_help()
 
