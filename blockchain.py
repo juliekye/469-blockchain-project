@@ -248,6 +248,19 @@ class BlockChain:
         print('Item with given id not found!')
         exit(1)
     
+    def show_history(self, case_id = None, item_id = None, num_entries = None, reverse = False, password = None):
+        blockList = self.blocks
+        if case_id is not None:
+            blockList = [blk for blk in blocks if blk.case_id == case_id]
+        elif item_id is not None: 
+            blockList = [blk for blk in blocks if blk.case_id == case_id]
+
+        if num_entries is not None:
+            blockList = blockList[:num_entries]
+        if reverse is True:
+            blockList = list(reversed(blockList))
+        if password is not None:
+    
     def checkout(self, item_id, password):
         if not item_id or not password:
             print('Wrong parameters passed to add!')
@@ -305,6 +318,14 @@ def parse_command_line():
     parser_remove.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
     parser_remove.add_argument('-y', '--reason', help="Reason for removing an item")
     parser_remove.add_argument('-p', '--password', help="Creator's Password")
+
+    #parser for 'show history' command
+    parser_history = subparsers.add_parser('show history', help='show the history of a blockchain item')
+    parser_history.add_argument('-c', '--case_id', help="case ID")
+    parser_history.add_argument('-i', '--item_id', help="item ID")
+    parser_history.add_argument('-n', '--num_entries', help="number of entries")
+    parser_history.add_argument('-r', '--reverse', help="reverse the order of entries to show most recent first")
+    parser_history.add_argument('-p', '--password', help="password")
 
 
     # Parse the command line arguments
