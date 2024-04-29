@@ -226,6 +226,51 @@ class BlockChain:
                 return print(f'Removed item: {item_id}\nStatus: DESTROYED\nTime of action: {new_b.time.iso8601()}')
             
 
+    def checkin(self, item_id, password):
+        if not item_id or not password:
+            print('Wrong parameters passed to add!')
+            exit(1)
+        if not is_valid_password(password):
+            print('Invalid password')
+            exit(1)
+        for b in self.blocks:
+            if item_id == b.evidence_item_id:
+                new_b = deepcopy(b)
+                new_b.state = BlockState.CHECKEDIN
+                new_b.owner = get_owner(password)
+                new_b.time = maya.now()
+                new_b.refresh()
+                self.blocks.append(new_b)
+                self._save()
+                
+                print(f'Case: {b.case_uuid}\nChecked in item: {item_id}\nStatus: CHECKEDIN\nTime of action: {new_b.time.iso8601()}')
+                return
+        print('Item with given id not found!')
+        exit(1)
+    
+    def checkout(self, item_id, password):
+        if not item_id or not password:
+            print('Wrong parameters passed to add!')
+            exit(1)
+        if not is_valid_password(password):
+            print('Invalid password')
+            exit(1)
+        for b in self.blocks:
+            if item_id == b.evidence_item_id:
+                new_b = deepcopy(b)
+                new_b.state = BlockState.CHECKEDOUT
+                new_b.owner = get_owner(password)
+                new_b.time = maya.now()
+                new_b.refresh()
+                self.blocks.append(new_b)
+                self._save()
+                
+                print(f'Case: {b.case_uuid}\nChecked out item: {item_id}\nStatus: CHECKEDOUT\nTime of action: {new_b.time.iso8601()}')
+                return
+        print('Item with given id not found!')
+        exit(1)
+
+
 def parse_command_line():
     parser = argparse.ArgumentParser(description="Blockchain Command Line Interface")
 
@@ -243,11 +288,14 @@ def parse_command_line():
     parser_add.add_argument('-p', '--password', help="Creator's password")
 
     # Parser for the 'checkin' command
-    parser_checkin = subparsers.add_parser('checkin', help='Checks in an item')
-    parser_checkin.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
-    parser_checkin.add_argument('-p', '--password', help="Password")
+    parser_checkin = subparsers.add_parser('checkin')
+    parser_checkin.add_argument('-i', '--item_id', type=int)
+    parser_checkin.add_argument('-p', '--password')
 
     # Parser for the 'checkout' command
+    parser_checkin = subparsers.add_parser('checkout')
+    parser_checkin.add_argument('-i', '--item_id', type=int)
+    parser_checkin.add_argument('-p', '--password')
     parser_checkin = subparsers.add_parser('checkin', help='Checks in an item')
     parser_checkin.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
     parser_checkin.add_argument('-p', '--password', help="Password")
@@ -273,6 +321,10 @@ def parse_command_line():
         pass
     elif args.command == 'add':
         blockchain.add(args.case_id, args.item_id, args.creator, args.password)
+    elif args.command == 'checkin':
+        blockchain.checkin(args.item_id, args.password)
+    elif args.command == 'checkout':
+        blockchain.checkout(args.item_id, args.password)
     elif args.comman == 'remove':
         blockchain.remove(args.item_id, args.reason, args.password)
     else:
