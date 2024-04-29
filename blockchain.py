@@ -57,8 +57,7 @@ class Block:
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
         block_instance.sha_256_hash = fields[0].hex() if fields[0] != b'\x00' * 32 else None
         block_instance.time = maya.MayaDT(fields[1]) if fields[1] != b'\x00' * 8 else None
-        q = fields[2]
-        block_instance.case_uuid = uuid.UUID(bytes=fields[2]) if fields[2] != b'\x00' * 32 else None
+        block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(fields[2])) if fields[2] != b'\x00' * 32 else None
         block_instance.evidence_item_id = fields[3] if fields[3] != b'\x00' * 32 else None
         block_instance.state = BlockState.from_name(fields[4].decode('utf-8').strip('\x00'))
         block_instance.creator = fields[5].decode('utf-8').strip('\x00') if fields[5] != b'\x00' * 12 else None
@@ -78,8 +77,8 @@ class Block:
             '32s d 32s 32s 12s 12s 12s I',
             self.sha_256_hash if self.sha_256_hash else b'\x00' * 32,
             self.time.epoch if self.time else 0,
-            self.case_uuid.bytes if self.case_uuid else b'\x00' * 32,
-            self.encrypt_data(str(self.evidence_item_id).encode('utf-8')) if self.evidence_item_id else b'\x00' * 32,
+            self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'\x00' * 32,
+            str(self.evidence_item_id).encode('utf-8') if self.evidence_item_id else b'\x00' * 32,
             self.state.name.encode('utf-8').ljust(12, b'\x00'),
             self.creator.encode('utf-8').ljust(12, b'\x00') if self.creator else b'\x00' * 12,
             self.owner.name.encode('utf-8').ljust(12, b'\x00') if self.owner else b'\x00' * 12,
@@ -95,12 +94,14 @@ class Block:
     def to_bytes(self):
         return self.byte_data
 
-    def encrypt_data(self, data: bytes) -> bytes:
+    @staticmethod
+    def encrypt_data(data: bytes) -> bytes:
         cipher = AES.new(AES_KEY, AES.MODE_ECB)
         encrypted_data = cipher.encrypt(pad(data, AES.block_size))
         return encrypted_data
 
-    def decrypt_data(self, encrypted_data: bytes) -> bytes:
+    @staticmethod
+    def decrypt_data(encrypted_data: bytes) -> bytes:
         cipher = AES.new(AES_KEY, AES.MODE_ECB)
         decrypted_data = unpad(cipher.decrypt(encrypted_data), AES.block_size)
         return decrypted_data
@@ -161,6 +162,7 @@ class BlockChain:
             print('Wrong parameters passed to add!')
             exit(1)
 
+        # Verify password
         if password.encode('utf-8') != BCHOC_PASSWORD_CREATOR:
             print('Invalid password')
             exit(1)
