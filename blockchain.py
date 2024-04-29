@@ -194,7 +194,7 @@ class BlockChain:
             b.data_length = len(b.data)
             b.refresh()
             self.blocks.append(b)
-            print(f'Added item: {i_id}\nStatus: CHECKEDIN\nTime of action: {b.time.iso8601()}')
+            print(f'Case: {b.case_uuid}\nItem: {b.evidence_item_id}\nAction: CHECKEDIN\nTime: {b.time.iso8601()}')
 
         self._save()
 
@@ -202,6 +202,11 @@ class BlockChain:
         # Verify data
         if not item_id or not reason or not password:
             print('Wrong parameters passed to remove!')
+            exit(1)
+        
+        # Verify reason
+        if reason not in ['DISPOSED', 'DESTROYED', 'RELEASED']:
+            print('invalid reason')
             exit(1)
 
         # Verify password
@@ -227,6 +232,7 @@ class BlockChain:
                 new_b.sha_256_hash = self.blocks[-1].compute_hash()
                 new_b.refresh()
                 self.blocks.append(new_b)
+                self._save()
                 return print(f'Removed item: {item_id}\nStatus: DESTROYED\nTime of action: {new_b.time.iso8601()}')
             
 
@@ -244,9 +250,9 @@ class BlockChain:
                 if b.state != BlockState.CHECKEDOUT:
                     print('Item must be checked in!')
                     exit(1)
-                if b.owner != get_owner(password):
-                    print('Invalid password')
-                    exit(1)
+                #if b.owner != get_owner(password):
+                #    print('Invalid password')
+                #    exit(1)
 
                 new_b = deepcopy(b)
                 new_b.state = BlockState.CHECKEDIN
@@ -272,12 +278,13 @@ class BlockChain:
             if item_id == b.evidence_item_id:
                 if b.state == BlockState.CHECKEDOUT:
                     return print('Item is already checked out!')
+                    exit(1)
                 if b.state != BlockState.CHECKEDIN:
                     print('Item must be checked in!')
                     exit(1)
 
                 new_b = deepcopy(b)
-                new_b.state = BlockState.CHECKEDIN
+                new_b.state = BlockState.CHECKEDOUT
                 new_b.owner = get_owner(password)
                 new_b.time = maya.now()
                 new_b.refresh()
@@ -318,20 +325,24 @@ class BlockChain:
         if password and not is_valid_password(password):
             print('Invalid password')
             exit(1)
-        blockList = self.blocks
-        if case_id is not None:
-            blockList = [blk for blk in self.blocks if blk.case_uuid == case_id]
-        elif item_id is not None: 
-            blockList = [blk for blk in self.blocks if blk.evidence_item_id == item_id]
-        if num_entries is not None:
-            blockList = blockList[:num_entries]
+        block_history = []
+        if case_id:
+            for b in self.blocks:
+                if b.case_uuid == case_id:
+                    block_history.append(b)
+        elif item_id: 
+            for b in self.blocks:
+                if b.evidence_item_id == item_id:
+                    block_history.append(b)
+        if num_entries:
+            block_history = block_history[:num_entries]
         if reverse:
-            blockList = list(reversed(blockList))
-        for b in blockList:
+            block_history = block_history[::-1]
+        for b in block_history:
             if not password:
-                print(f'Case: {b.get_encrypted_uuid()}\nItem: {b.evidence_item_id}\nAction: {b.state}\nTime: {b.time.iso8601()}')
+                print(f'Case: {b.get_encrypted_uuid()}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601()}')
             else:
-                print(f'Case: {b.case_uuid}\nItem: {b.evidence_item_id}\nAction: {b.state}\nTime: {b.time.iso8601()}')
+                print(f'Case: {b.case_uuid}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601()}')
 
 
 def parse_command_line():
@@ -364,7 +375,8 @@ def parse_command_line():
     # Parser for the 'remove' command
     parser_remove = subparsers.add_parser('remove', help='Removes an item')
     parser_remove.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
-    parser_remove.add_argument('-y', '--reason', help="Reason for removing an item")
+    #parser_remove.add_argument('-y', '--reason', help="Reason for removing an item")
+    parser_remove.add_argument('-y', '--why', required=True, dest='reason', help="Reason for removing an item")
     parser_remove.add_argument('-p', '--password', help="Creator's Password")
 
     #parser for 'show cases' 'show items' and 'show history' commands
