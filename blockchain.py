@@ -195,7 +195,6 @@ class BlockChain:
         self._save()
 
     def checkin(self, item_id, password):
-       
         if not item_id or not password:
             print('Wrong parameters passed to add!')
             exit(1)
@@ -214,8 +213,28 @@ class BlockChain:
                 
                 print(f'Case: {b.case_uuid}\nChecked in item: {item_id}\nStatus: CHECKEDIN\nTime of action: {new_b.time.iso8601()}')
                 return
-        print(f'Item ID does not exist')
-        
+        print('Item with given id not found!')
+        exit(1)
+    
+    def checkout(self, item_id, password):
+        if not item_id or not password:
+            print('Wrong parameters passed to add!')
+            exit(1)
+        if not is_valid_password(password):
+            print('Invalid password')
+            exit(1)
+        for b in self.blocks:
+            if item_id == b.evidence_item_id:
+                new_b = deepcopy(b)
+                new_b.state = BlockState.CHECKEDOUT
+                new_b.owner = get_owner(password)
+                new_b.time = maya.now()
+                new_b.refresh()
+                self.blocks.append(new_b)
+                self._save()
+                
+                print(f'Case: {b.case_uuid}\nChecked out item: {item_id}\nStatus: CHECKEDOUT\nTime of action: {new_b.time.iso8601()}')
+                return
         print('Item with given id not found!')
         exit(1)
 
@@ -262,6 +281,8 @@ def parse_command_line():
         blockchain.add(args.case_id, args.item_id, args.creator, args.password)
     elif args.command == 'checkin':
         blockchain.checkin(args.item_id, args.password)
+    elif args.command == 'checkout':
+        blockchain.checkout(args.item_id, args.password)
     else:
         parser.print_help()
 
