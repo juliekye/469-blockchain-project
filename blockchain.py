@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from copy import deepcopy
 import hashlib
 import os
 import traceback
@@ -193,6 +194,37 @@ class BlockChain:
 
         self._save()
 
+    def remove(self, item_id: int, reason: str, password: str):
+        # Verify data
+        if not item_id or not reason or not password:
+            print('Wrong parameters passed to remove!')
+            exit(1)
+
+        # Verify password
+        if password.encode('utf-8') != BCHOC_PASSWORD_CREATOR:
+            print('Invalid password')
+            exit(1)
+
+        if all(b.item_id != item_id for b in self.blocks):
+            print('Item id does not exist!')
+            exit(1)
+
+        for b in self.blocks[::-1]:
+            if b.evidence_item_id == item_id:
+                if b.state != BlockState.CHECKEDIN:
+                    print('Block must be checked in!')
+                    exit(1)
+                new_b = deepcopy(b)
+                new_b.state = BlockState.DESTROYED
+                new_b.owner = get_owner(password)
+                new_b.time = maya.now()
+                new_b.data = f'Removed. Reason: {reason}'
+                new_b.data_length = len(new_b.data)
+                new_b.sha_256_hash = self.blocks[-1].compute_hash()
+                new_b.refresh()
+                self.blocks.append(new_b)
+                return print(f'Removed item: {item_id}\nStatus: DESTROYED\nTime of action: {new_b.time.iso8601()}')
+            
 
 def parse_command_line():
     parser = argparse.ArgumentParser(description="Blockchain Command Line Interface")
@@ -220,6 +252,13 @@ def parse_command_line():
     parser_checkin.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
     parser_checkin.add_argument('-p', '--password', help="Password")
 
+    # Parser for the 'remove' command
+    parser_remove = subparsers.add_parser('remove', help='Removes an item')
+    parser_remove.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
+    parser_remove.add_argument('-y', '--reason', help="Reason for removing an item")
+    parser_remove.add_argument('-p', '--password', help="Creator's Password")
+
+
     # Parse the command line arguments
     args = parser.parse_args()
 
@@ -234,6 +273,8 @@ def parse_command_line():
         pass
     elif args.command == 'add':
         blockchain.add(args.case_id, args.item_id, args.creator, args.password)
+    elif args.comman == 'remove':
+        blockchain.remove(args.item_id, args.reason, args.password)
     else:
         parser.print_help()
 
