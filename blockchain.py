@@ -101,8 +101,6 @@ class BlockChain:
                 self.blocks.append(block)
 
 
-
-
 def parse_command_line():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest='command', help='sub-command help')
