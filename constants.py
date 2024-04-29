@@ -26,4 +26,12 @@ def get_password(owner: Owner) -> bytes:
     {Owner.POLICE: BCHOC_PASSWORD_POLICE, Owner.LAWYER: BCHOC_PASSWORD_LAWYER, Owner.ANALYST: BCHOC_PASSWORD_ANALYST, Owner.EXECUTIVE: BCHOC_PASSWORD_EXECUTIVE}.get(owner, BCHOC_PASSWORD_CREATOR)
 
 def get_owner(p: str) -> Owner:
-    {BCHOC_PASSWORD_POLICE: Owner.POLICE, BCHOC_PASSWORD_LAWYER: Owner.LAWYER, BCHOC_PASSWORD_ANALYST: Owner.ANALYST, BCHOC_PASSWORD_EXECUTIVE: Owner.EXECUTIVE}.get(p.encode('utf-8'))
+    if p == BCHOC_PASSWORD_POLICE.decode('utf-8'):
+        return Owner.POLICE
+    elif p == BCHOC_PASSWORD_LAWYER.decode('utf-8'):
+        return Owner.LAWYER
+    elif p == BCHOC_PASSWORD_ANALYST.decode('utf-8'):
+        return Owner.ANALYST
+    elif p == BCHOC_PASSWORD_EXECUTIVE.decode('utf-8'):
+        return Owner.EXECUTIVE
+    return None

@@ -58,7 +58,7 @@ class Block:
         block_instance.sha_256_hash = fields[0].hex() if fields[0] != b'\x00' * 32 else None
         block_instance.time = maya.MayaDT(fields[1]) if fields[1] != b'\x00' * 8 else None
         block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(fields[2])) if fields[2] != b'\x00' * 32 else None
-        block_instance.evidence_item_id = fields[3] if fields[3] != b'\x00' * 32 else None
+        block_instance.evidence_item_id = int.from_bytes(fields[3], byteorder='little', signed=False) if fields[3] != b'\x00' * 32 else None
         block_instance.state = BlockState.from_name(fields[4].decode('utf-8').strip('\x00'))
         block_instance.creator = fields[5].decode('utf-8').strip('\x00') if fields[5] != b'\x00' * 12 else None
         block_instance.owner = Owner(fields[6].decode('utf-8').strip('\x00')) if fields[6] != b'\x00' * 12 else None
@@ -75,10 +75,10 @@ class Block:
         # For UUID and hashes, convert to bytes, for others use empty strings.
         byte_data = struct.pack(
             '32s d 32s 32s 12s 12s 12s I',
-            self.sha_256_hash if self.sha_256_hash else b'\x00' * 32,
+            self.sha_256_hash.encode('utf-8') if self.sha_256_hash else b'\x00' * 32,
             self.time.epoch if self.time else 0,
             self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'\x00' * 32,
-            str(self.evidence_item_id).encode('utf-8') if self.evidence_item_id else b'\x00' * 32,
+            self.evidence_item_id.to_bytes(32, byteorder='little', signed=False) if self.evidence_item_id else b'\x00' * 32,
             self.state.name.encode('utf-8').ljust(12, b'\x00'),
             self.creator.encode('utf-8').ljust(12, b'\x00') if self.creator else b'\x00' * 12,
             self.owner.name.encode('utf-8').ljust(12, b'\x00') if self.owner else b'\x00' * 12,
@@ -233,11 +233,20 @@ class BlockChain:
         if not is_valid_password(password):
             print('Invalid password')
             exit(1)
-        for b in self.blocks:
+        for b in self.blocks[::-1]:
             if item_id == b.evidence_item_id:
+                if b.state == BlockState.CHECKEDIN:
+                    return print('Item is already checked in!')
+                if b.state != BlockState.CHECKEDOUT:
+                    print('Item must be checked in!')
+                    exit(1)
+                if b.owner != get_owner(password):
+                    print('Invalid password')
+                    exit(1)
+
                 new_b = deepcopy(b)
                 new_b.state = BlockState.CHECKEDIN
-                new_b.owner = get_owner(password)
+                new_b.owner = None
                 new_b.time = maya.now()
                 new_b.refresh()
                 self.blocks.append(new_b)
@@ -255,10 +264,16 @@ class BlockChain:
         if not is_valid_password(password):
             print('Invalid password')
             exit(1)
-        for b in self.blocks:
+        for b in self.blocks[::-1]:
             if item_id == b.evidence_item_id:
+                if b.state == BlockState.CHECKEDOUT:
+                    return print('Item is already checked out!')
+                if b.state != BlockState.CHECKEDIN:
+                    print('Item must be checked in!')
+                    exit(1)
+
                 new_b = deepcopy(b)
-                new_b.state = BlockState.CHECKEDOUT
+                new_b.state = BlockState.CHECKEDIN
                 new_b.owner = get_owner(password)
                 new_b.time = maya.now()
                 new_b.refresh()
@@ -332,9 +347,4 @@ def parse_command_line():
 
 
 if __name__ == '__main__':
-    try:
-        parse_command_line()
-    except:
-        print(traceback.print_exc())
-        print('An unexpected error occurred!')
-        exit(1)
+    parse_command_line()
