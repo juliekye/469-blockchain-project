@@ -38,7 +38,7 @@ class BlockState(Enum):
 class Block:
     def __init__(self) -> None:
         self.sha_256_hash = None
-        self.time = maya.now()
+        self.time = None
         self.case_uuid = None
         self.evidence_item_id = None
         self.state = BlockState.INITIAL
@@ -54,6 +54,10 @@ class Block:
     def from_bytes(cls, byte_data: bytes):
         block_instance = cls()
         block_instance.byte_data = byte_data
+
+        # Too little data
+        if len(byte_data) < 144:
+            exit(1)
         
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
         block_instance.sha_256_hash = fields[0].hex() if fields[0] != b'\x00' * 32 else None
@@ -67,6 +71,48 @@ class Block:
         block_instance.data = byte_data[144:144 + block_instance.data_length].decode('utf-8')
         
         return block_instance
+
+    # @classmethod
+    # def from_bytes(cls, byte_data: bytes):
+    #     block_instance = cls()
+    #     block_instance.byte_data = byte_data
+
+    #     # Too little data
+    #     if len(byte_data) < 144:
+    #         exit(1)
+        
+    #     # Manually slice the bytes
+    #     offset = 0
+    #     previous_hash_bytes = byte_data[offset:offset+32]
+    #     offset += 32
+    #     timestamp_bytes = byte_data[offset:offset+8]
+    #     offset += 8
+    #     case_id_bytes = byte_data[offset:offset+32]
+    #     offset += 32
+    #     evidence_item_id_bytes = byte_data[offset:offset+32]
+    #     offset += 32
+    #     state_bytes = byte_data[offset:offset+12]
+    #     offset += 12
+    #     creator_bytes = byte_data[offset:offset+12]
+    #     offset += 12
+    #     owner_bytes = byte_data[offset:offset+12]
+    #     offset += 12
+    #     data_length_bytes = byte_data[offset:offset+4]
+    #     offset += 4
+        
+    #     # Convert bytes to the appropriate types
+    #     block_instance.sha_256_hash = previous_hash_bytes.hex() if previous_hash_bytes != b'\x00' * 32 else None
+    #     block_instance.time = maya.MayaDT(int.from_bytes(timestamp_bytes, byteorder='big', signed=False)) if timestamp_bytes != b'\x00' * 8 else None
+    #     block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(case_id_bytes)) if case_id_bytes != b'\x00' * 32 else None
+    #     block_instance.evidence_item_id = int.from_bytes(evidence_item_id_bytes, byteorder='little', signed=False) if evidence_item_id_bytes != b'\x00' * 32 else None
+    #     block_instance.state = BlockState[state_bytes.decode('utf-8').strip('\x00')]
+    #     block_instance.creator = creator_bytes.decode('utf-8').strip('\x00') if creator_bytes != b'\x00' * 12 else None
+    #     block_instance.owner = Owner[owner_bytes.decode('utf-8').strip('\x00')] if owner_bytes != b'\x00' * 12 else None
+    #     block_instance.data_length = int.from_bytes(data_length_bytes, byteorder='big')
+    #     block_instance.data = byte_data[offset:offset + block_instance.data_length].decode('utf-8')
+        
+    #     return block_instance
+
     
     def __len__(self) -> int:
         return 144 + self.data_length
@@ -87,6 +133,33 @@ class Block:
         )
         byte_data += self.data.encode('utf-8')  
         return byte_data
+        # previous_hash_bytes = self.sha_256_hash if self.sha_256_hash else b'\x00' * 32
+        # timestamp_bytes = bytearray(struct.pack('d', self.time.epoch)) if self.time else b'\x00' * 8
+        # case_id_bytes = self.encrypt_data(self.case_uuid) if self.case_uuid else b'\x00' * 32
+        # evidence_item_id_bytes = self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'\x00' * 32
+        # state_bytes = self.state.name.encode('utf-8').ljust(12, b'\x00')
+        # creator_bytes = self.creator.encode('utf-8').ljust(12, b'\x00') if self.creator else b'\x00' * 12
+        # owner_bytes = self.owner.name.encode('utf-8').ljust(12, b'\x00')  if self.owner else b'\x00' * 12
+        # data_length_bytes = len(self.data).to_bytes(4, 'big')
+        # data_bytes = self.data.encode('utf-8')
+
+        # # Concatenate all parts together
+        # packed_data = (
+        #     previous_hash_bytes +
+        #     timestamp_bytes +
+        #     case_id_bytes +
+        #     evidence_item_id_bytes +
+        #     state_bytes +
+        #     creator_bytes +
+        #     owner_bytes +
+        #     data_length_bytes +
+        #     data_bytes
+        # )
+
+        # return packed_data
+
+    
+
     
     def refresh(self):
         """Every time a data is refreshed - this method shuold be called"""
