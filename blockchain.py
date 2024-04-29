@@ -112,6 +112,9 @@ class Block:
         """
         return hashlib.sha256(self.to_bytes()).digest()
     
+    def get_encrypted_uuid(self):
+        return self.encrypt_data(self.case_uuid.bytes).hex()
+    
 
 class BlockChain:
     def __init__(self, path: str = BCHOC_FILE_PATH):
@@ -205,7 +208,7 @@ class BlockChain:
             print('Invalid password')
             exit(1)
 
-        if all(b.item_id != item_id for b in self.blocks):
+        if all(b.evidence_item_id != item_id for b in self.blocks):
             print('Item id does not exist!')
             exit(1)
 
@@ -257,19 +260,6 @@ class BlockChain:
         print('Item with given id not found!')
         exit(1)
     
-    """def show_history(self, case_id = None, item_id = None, num_entries = None, reverse = False, password = None):
-        blockList = self.blocks
-        if case_id is not None:
-            blockList = [blk for blk in blocks if blk.case_id == case_id]
-        elif item_id is not None: 
-            blockList = [blk for blk in blocks if blk.case_id == case_id]
-
-        if num_entries is not None:
-            blockList = blockList[:num_entries]
-        if reverse is True:
-            blockList = list(reversed(blockList))
-        if password is not None:"""
-    
     def checkout(self, item_id, password):
         if not item_id or not password:
             print('Wrong parameters passed to add!')
@@ -310,6 +300,38 @@ class BlockChain:
                 print(case)  
         else:
             print("No cases found in the blockchain.")
+    
+    def show_items(self, case_id):
+        case_items = []
+        for block in self.blocks:
+            if block.case_uuid == uuid.UUID(case_id) and not block.evidence_item_id in case_items:
+                case_items.append(block.evidence_item_id)
+
+        if case_items:
+            for item in case_items[::-1]:
+                print(item)
+        else:
+            print("No items found for this case")
+
+    def show_history(self, case_id, item_id, num_entries, reverse, password):
+        if password and not is_valid_password(password):
+            print('Invalid password')
+            exit(1)
+        blockList = self.blocks
+        if case_id is not None:
+            blockList = [blk for blk in self.blocks if blk.case_uuid == case_id]
+        elif item_id is not None: 
+            blockList = [blk for blk in self.blocks if blk.evidence_item_id == item_id]
+        if num_entries is not None:
+            blockList = blockList[:num_entries]
+        if reverse:
+            blockList = list(reversed(blockList))
+        for b in blockList:
+            if not password:
+                print(f'Case: {b.get_encrypted_uuid()}\nItem: {b.evidence_item_id}\nAction: {b.state}\nTime: {b.time.iso8601()}')
+            else:
+                print(f'Case: {b.case_uuid}\nItem: {b.evidence_item_id}\nAction: {b.state}\nTime: {b.time.iso8601()}')
+
 
 def parse_command_line():
     parser = argparse.ArgumentParser(description="Blockchain Command Line Interface")
@@ -344,12 +366,16 @@ def parse_command_line():
     parser_remove.add_argument('-y', '--reason', help="Reason for removing an item")
     parser_remove.add_argument('-p', '--password', help="Creator's Password")
 
-    #parser for 'show cases' and 'show history' commands
+    #parser for 'show cases' 'show items' and 'show history' commands
     parser_show = subparsers.add_parser('show', help='Show commands')
     show_subparsers = parser_show.add_subparsers(dest='show_command', required=True, help='Show specific details')
 
     #parser for show cases
     show_subparsers.add_parser('cases', help='Show all cases')
+
+    #parser for show items
+    parser_show_items = show_subparsers.add_parser('items', help='Show all items')
+    parser_show_items.add_argument('-c', '--case_id', help="Case ID", type=str)
 
     #parser for show history
     parser_history = show_subparsers.add_parser('history', help='Show the history of a case or an item')
@@ -382,8 +408,10 @@ def parse_command_line():
     elif args.command == 'show':
         if args.show_command == 'cases':
             blockchain.show_cases()
+        elif args.show_command == 'items':
+            blockchain.show_items(args.case_id)
         elif args.show_command == 'history':
-            blockchain.show_history(case_id=args.case_id, item_id=args.item_id, num_entries=args.num_entries, reverse=args.reverse)
+            blockchain.show_history(args.case_id, args.item_id, args.num_entries, args.reverse, args.password)
        
     else:
         parser.print_help()
