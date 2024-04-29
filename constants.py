@@ -13,10 +13,10 @@ BCHOC_PASSWORD_CREATOR: bytes = os.environ.get('BCHOC_PASSWORD_CREATOR', 'C67C')
 
 
 class Owner(Enum):
-    POLICE = 'Police'
-    LAWYER = 'Lawyer'
-    ANALYST = 'Analyst'
-    EXECUTIVE = 'Executive'
+    POLICE = 'POLICE'
+    LAWYER = 'LAWYER'
+    ANALYST = 'ANALYST'
+    EXECUTIVE = 'EXECUTIVE'
 
 
 def is_valid_password(p: str) -> bool:

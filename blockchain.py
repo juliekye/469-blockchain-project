@@ -75,7 +75,7 @@ class Block:
         # For UUID and hashes, convert to bytes, for others use empty strings.
         byte_data = struct.pack(
             '32s d 32s 32s 12s 12s 12s I',
-            self.sha_256_hash.encode('utf-8') if self.sha_256_hash else b'\x00' * 32,
+            (self.sha_256_hash.encode('utf-8') if isinstance(self.sha_256_hash, str) else self.sha_256_hash) if self.sha_256_hash else b'\x00' * 32,
             self.time.epoch if self.time else 0,
             self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'\x00' * 32,
             self.evidence_item_id.to_bytes(32, byteorder='little', signed=False) if self.evidence_item_id else b'\x00' * 32,
@@ -257,7 +257,7 @@ class BlockChain:
         print('Item with given id not found!')
         exit(1)
     
-    def show_history(self, case_id = None, item_id = None, num_entries = None, reverse = False, password = None):
+    """def show_history(self, case_id = None, item_id = None, num_entries = None, reverse = False, password = None):
         blockList = self.blocks
         if case_id is not None:
             blockList = [blk for blk in blocks if blk.case_id == case_id]
@@ -268,7 +268,7 @@ class BlockChain:
             blockList = blockList[:num_entries]
         if reverse is True:
             blockList = list(reversed(blockList))
-        if password is not None:
+        if password is not None:"""
     
     def checkout(self, item_id, password):
         if not item_id or not password:
@@ -298,6 +298,18 @@ class BlockChain:
         print('Item with given id not found!')
         exit(1)
 
+    def show_cases(self):
+        unique_cases = []
+        for block in self.blocks:
+            if block.case_uuid and block.case_uuid != "None":
+                if not block.case_uuid in unique_cases:
+                    unique_cases.append(block.case_uuid) 
+
+        if unique_cases:
+            for case in unique_cases[::-1]:
+                print(case)  
+        else:
+            print("No cases found in the blockchain.")
 
 def parse_command_line():
     parser = argparse.ArgumentParser(description="Blockchain Command Line Interface")
@@ -324,9 +336,7 @@ def parse_command_line():
     parser_checkin = subparsers.add_parser('checkout')
     parser_checkin.add_argument('-i', '--item_id', type=int)
     parser_checkin.add_argument('-p', '--password')
-    parser_checkin = subparsers.add_parser('checkin', help='Checks in an item')
-    parser_checkin.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
-    parser_checkin.add_argument('-p', '--password', help="Password")
+
 
     # Parser for the 'remove' command
     parser_remove = subparsers.add_parser('remove', help='Removes an item')
@@ -334,14 +344,20 @@ def parse_command_line():
     parser_remove.add_argument('-y', '--reason', help="Reason for removing an item")
     parser_remove.add_argument('-p', '--password', help="Creator's Password")
 
-    #parser for 'show history' command
-    parser_history = subparsers.add_parser('show history', help='show the history of a blockchain item')
-    parser_history.add_argument('-c', '--case_id', help="case ID")
-    parser_history.add_argument('-i', '--item_id', help="item ID")
-    parser_history.add_argument('-n', '--num_entries', help="number of entries")
-    parser_history.add_argument('-r', '--reverse', help="reverse the order of entries to show most recent first")
-    parser_history.add_argument('-p', '--password', help="password")
+    #parser for 'show cases' and 'show history' commands
+    parser_show = subparsers.add_parser('show', help='Show commands')
+    show_subparsers = parser_show.add_subparsers(dest='show_command', required=True, help='Show specific details')
 
+    #parser for show cases
+    show_subparsers.add_parser('cases', help='Show all cases')
+
+    #parser for show history
+    parser_history = show_subparsers.add_parser('history', help='Show the history of a case or an item')
+    parser_history.add_argument('-c', '--case_id', help="Case ID", type=str)
+    parser_history.add_argument('-i', '--item_id', help="Item ID", type=int)
+    parser_history.add_argument('-n', '--num_entries', type=int, help="Number of entries to show")
+    parser_history.add_argument('-r', '--reverse', action='store_true', help="Reverse the order of entries")
+    parser_history.add_argument('-p', '--password', help="password")
 
     # Parse the command line arguments
     args = parser.parse_args()
@@ -361,8 +377,14 @@ def parse_command_line():
         blockchain.checkin(args.item_id, args.password)
     elif args.command == 'checkout':
         blockchain.checkout(args.item_id, args.password)
-    elif args.comman == 'remove':
+    elif args.command == 'remove':
         blockchain.remove(args.item_id, args.reason, args.password)
+    elif args.command == 'show':
+        if args.show_command == 'cases':
+            blockchain.show_cases()
+        elif args.show_command == 'history':
+            blockchain.show_history(case_id=args.case_id, item_id=args.item_id, num_entries=args.num_entries, reverse=args.reverse)
+       
     else:
         parser.print_help()
 
