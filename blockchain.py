@@ -56,6 +56,7 @@ class Block:
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
         block_instance.sha_256_hash = fields[0].hex() if fields[0] != b'\x00' * 32 else None
         block_instance.time = maya.MayaDT(fields[1]) if fields[1] != b'\x00' * 8 else None
+        q = fields[2]
         block_instance.case_uuid = uuid.UUID(bytes=fields[2]) if fields[2] != b'\x00' * 32 else None
         block_instance.evidence_item_id = fields[3] if fields[3] != b'\x00' * 32 else None
         block_instance.state = BlockState.from_name(fields[4].decode('utf-8').strip('\x00'))
@@ -197,12 +198,25 @@ def parse_command_line():
     # Create a subparsers object for handling subcommands
     subparsers = parser.add_subparsers(dest='command', required=True, help='Available commands')
 
+    # Parser for init
+    parser_init = subparsers.add_parser('init', help='Initializes blockchain')
+
     # Parser for the 'add' command
     parser_add = subparsers.add_parser('add', help='add a new item to the blockchain')
     parser_add.add_argument('-c', '--case_id', required=True, help='Case ID')
     parser_add.add_argument('-i', '--item_id', action='append', type=int, required=True, help='Item ID(s)')
     parser_add.add_argument('-g', '--creator', required=True, help="Creator's name")
     parser_add.add_argument('-p', '--password', help="Creator's password")
+
+    # Parser for the 'checkin' command
+    parser_checkin = subparsers.add_parser('checkin', help='Checks in an item')
+    parser_checkin.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
+    parser_checkin.add_argument('-p', '--password', help="Password")
+
+    # Parser for the 'checkout' command
+    parser_checkin = subparsers.add_parser('checkin', help='Checks in an item')
+    parser_checkin.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
+    parser_checkin.add_argument('-p', '--password', help="Password")
 
     # Parse the command line arguments
     args = parser.parse_args()
