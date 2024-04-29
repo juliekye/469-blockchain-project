@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import argparse
 from copy import deepcopy
 import hashlib
@@ -398,6 +399,7 @@ def parse_command_line():
         # blockchain.verify()
         pass
     elif args.command == 'add':
+        if msg == 'Blockchain file not found. Created INITIAL block.': print(msg)
         blockchain.add(args.case_id, args.item_id, args.creator, args.password)
     elif args.command == 'checkin':
         blockchain.checkin(args.item_id, args.password)
