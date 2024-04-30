@@ -133,19 +133,6 @@ class BlockChain:
             self._save()
             return 'Blockchain file not found. Created INITIAL block.'
         
-
-    def verify(self) -> str:
-        Txs = 0
-        observed_hashes = []
-        expected_hashes = []
-        for b in self.blocks:
-            Txs += 1
-            observed_hashes.append(hashlib.sha256(b.to_bytes()).hexdigest())
-            expected_hashes.append(b.sha_256_hash)
-
-        print(f'Transactions in blockchain: {Txs}')
-        
-        
         
     def _read(self):
         with open(self.path, 'rb') as f:
@@ -349,6 +336,32 @@ class BlockChain:
                 print(f'Case: {b.get_encrypted_uuid()}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601()}')
             else:
                 print(f'Case: {b.case_uuid}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601()}')
+    
+    def verify(self) -> str:
+        clean = True
+        msg = ''
+        hashes = set()
+        prev = Block()
+        for b in self.blocks:
+            curr_hash = b.compute_hash()
+            if b.sha_256_hash != prev.sha_256_hash:
+                msg ='Expected different hash\nBad Block: {b.case_uuid}\nBlock contents do not match block checksum.'
+                clean = False
+                break
+            if prev.sha_256_hash in hashes:
+                msg = 'Bad Block: {b.case_uuid}\nParent Block: {prev.case_uuid}\nTwo blocks were found with the same parent'
+                clean = False
+                break
+            if prev.compute_hash() not in hashes:
+                msg = 'Bad Block: {b.case_uuid}\nParent block: NOT FOUND'
+            hashes.add(prev.sha_256_hash)
+            prev = b
+
+        if not clean:
+            print(f'Transactions in blockchain: {len(self.blocks)}\nState of blockchain: ERROR\n{msg}')
+            exit(1)
+            
+        print(f'Transactions in blockchain: {len(self.blocks)}')
 
 
 def parse_command_line():
