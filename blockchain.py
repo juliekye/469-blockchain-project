@@ -358,8 +358,11 @@ class BlockChain:
         msg = ''
         hashes = set()
         removed = set()
-        prev = Block()
-        for b in self.blocks:
+        prev = self.blocks[0]
+        hashes.add(prev.sha_256_hash)
+        if prev.state == BlockState.DESTROYED:
+            removed.add(prev.evidence_item_id)
+        for b in self.blocks[1:]:
             if (b.state == BlockState.CHECKEDIN or b.state== BlockState.CHECKEDOUT) and b.evidence_item_id in removed:
                 msg = f'Bad Block: {b.case_uuid}\nItem checked out or checked in after removal from chain.'
                 clean = False
@@ -368,16 +371,16 @@ class BlockChain:
                 removed.add(b.evidence_item_id)
 
             curr_hash = b.sha_256_hash
-            if curr_hash != prev.compute_hash():
-                msg =f'Expected different hash\nBad Block: {b.case_uuid}\nBlock contents do not match block checksum.'
-                clean = False
-                break
             if curr_hash in hashes:
                 msg = f'Bad Block: {b.case_uuid}\nParent Block: {prev.case_uuid}\nTwo blocks were found with the same parent'
                 clean = False
                 break
             if prev.sha_256_hash not in hashes:
                 msg = f'Bad Block: {b.case_uuid}\nParent block: NOT FOUND'
+                clean = False
+                break
+            if curr_hash != prev.compute_hash():
+                msg =f'Bad Block: {b.case_uuid}\nBlock contents do not match block checksum.'
                 clean = False
                 break
             hashes.add(curr_hash)
