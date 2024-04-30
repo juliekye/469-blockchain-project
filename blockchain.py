@@ -417,7 +417,7 @@ def parse_command_line():
     parser_history.add_argument('-p', '--password', help="password")
 
     #parser for verify
-    parser_verify = show_subparsers.add_parser('verify', help='verify blockchain')
+    parser_verify = subparsers.add_parser('verify', help='verify blockchain')
 
     # Parse the command line arguments
     args = parser.parse_args()
