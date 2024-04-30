@@ -63,11 +63,11 @@ class Block:
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
         block_instance.sha_256_hash = fields[0]
         block_instance.time = maya.MayaDT(fields[1]) if fields[1] != 0. else None
-        block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(fields[2])) if fields[2] != b'0' * 32 else None
+        block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(bytes.fromhex(fields[2].decode()), use_pad=False)) if fields[2] != b'0' * 32 else None
 
         if fields[3] != b'0' * 32:
-            ev_id_bytes = bytes.fromhex(fields[3].decode('ascii'))
-            ev_id_bytes = cls.decrypt_data(ev_id_bytes)
+            ev_id_bytes = bytes.fromhex(fields[3].decode())
+            ev_id_bytes = cls.decrypt_data(ev_id_bytes, False)
             ev_id = int.from_bytes(ev_id_bytes, 'big')
 
         block_instance.evidence_item_id = ev_id if fields[3] != b'0' * 32 else 0
@@ -86,16 +86,13 @@ class Block:
     def to_bytes(self) -> bytes:
         # Before packing, ensure that all None fields are appropriately handled.
         # For UUID and hashes, convert to bytes, for others use empty strings.
-        if self.evidence_item_id:
-            evd_id_bytes = self.evidence_item_id.to_bytes((self.evidence_item_id.bit_length() + 7) // 8, 'big')
-            evidence_hex = self.encrypt_data(evd_id_bytes).hex().encode('ascii')
 
         byte_data = struct.pack(
             '32s d 32s 32s 12s 12s 12s I',
             self.sha_256_hash,
             self.time.epoch if self.time else 0.0,
-            self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'0' * 32,
-            evidence_hex if self.evidence_item_id else b'0' * 32,
+            self.encrypt_data(self.case_uuid.bytes, use_pad=False).hex().encode() if self.case_uuid else b'0' * 32,
+            self.encrypt_data(self.evidence_item_id.to_bytes(16, 'big')).hex().encode() if self.evidence_item_id else b'0' * 32,
             self.state.name.encode().ljust(12, b'\x00'),
             self.creator.encode().ljust(12, b'\x00') if self.creator else b'\x00' * 12,
             self.owner.name.encode().ljust(12, b'\x00') if self.owner else b'\x00' * 12,
@@ -105,15 +102,23 @@ class Block:
         return byte_data
 
     @staticmethod
-    def encrypt_data(data: bytes) -> bytes:
+    def encrypt_data(data: bytes, use_pad: bool = False) -> bytes:
         cipher = AES.new(AES_KEY, AES.MODE_ECB)
-        encrypted_data = cipher.encrypt(pad(data, AES.block_size))
+        if use_pad:
+            encrypted_data = cipher.encrypt(pad(data, AES.block_size))
+        else:
+            encrypted_data = cipher.encrypt(data)
+
         return encrypted_data
 
     @staticmethod
-    def decrypt_data(encrypted_data: bytes) -> bytes:
+    def decrypt_data(encrypted_data: bytes, use_pad: bool = False) -> bytes:
         cipher = AES.new(AES_KEY, AES.MODE_ECB)
-        decrypted_data = unpad(cipher.decrypt(encrypted_data), AES.block_size)
+        if use_pad:
+            decrypted_data = unpad(cipher.decrypt(encrypted_data), AES.block_size)
+        else:
+            decrypted_data = cipher.decrypt(encrypted_data)
+
         return decrypted_data
     
     def compute_hash(self) -> bytes:
