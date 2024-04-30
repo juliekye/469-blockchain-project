@@ -416,6 +416,9 @@ def parse_command_line():
     parser_history.add_argument('-r', '--reverse', action='store_true', help="Reverse the order of entries")
     parser_history.add_argument('-p', '--password', help="password")
 
+    #parser for verify
+    parser_verify = show_subparsers.add_parser('verify', help='verify blockchain')
+
     # Parse the command line arguments
     args = parser.parse_args()
 
@@ -426,8 +429,7 @@ def parse_command_line():
     if args.command == 'init':
         print(msg)
     elif args.command == 'verify':
-        # blockchain.verify()
-        pass
+        blockchain.verify()
     elif args.command == 'add':
         if msg == 'Blockchain file not found. Created INITIAL block.': print(msg)
         blockchain.add(args.case_id, args.item_id, args.creator, args.password)
