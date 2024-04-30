@@ -53,12 +53,12 @@ class Block:
         if len(byte_data) < 144:
             exit(1)
 
-        print('\nBlock data:\n', file=sys.stderr)
-        hex_string = ' '.join(f"{byte:02x}" for byte in byte_data[:144])
-        ascii_string = ''.join(chr(byte) if 32 <= byte <= 127 else '.' for byte in byte_data[:144])
-        print(hex_string, file=sys.stderr)
-        print(ascii_string, file=sys.stderr)
-        print('=' * 10 + '\n', file=sys.stderr)
+        # print('\nBlock data:\n', file=sys.stderr)
+        # hex_string = ' '.join(f"{byte:02x}" for byte in byte_data[:144])
+        # ascii_string = ''.join(chr(byte) if 32 <= byte <= 127 else '.' for byte in byte_data[:144])
+        # print(hex_string, file=sys.stderr)
+        # print(ascii_string, file=sys.stderr)
+        # print('=' * 10 + '\n', file=sys.stderr)
         
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
         block_instance.sha_256_hash = fields[0]
@@ -257,13 +257,13 @@ class BlockChain:
                 if b.state != BlockState.CHECKEDOUT:
                     print('Item must be checked in!')
                     exit(1)
-                #if b.owner != get_owner(password):
+                # if b.owner != get_owner(password):
                 #    print('Invalid password')
                 #    exit(1)
 
                 new_b = deepcopy(b)
                 new_b.state = BlockState.CHECKEDIN
-                new_b.owner = None
+                new_b.owner = get_owner(password)
                 new_b.time = maya.now()
                 self.blocks.append(new_b)
                 self._save()
