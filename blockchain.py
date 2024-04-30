@@ -195,7 +195,7 @@ class BlockChain:
             b.data = ""
             b.data_length = 0
             self.blocks.append(b)
-            print(f'Case: {b.case_uuid}\nItem: {b.evidence_item_id}\nAction: CHECKEDIN\nTime: {b.time.iso8601()}')
+            print(f'Added item: {b.evidence_item_id}\nStatus: CHECKEDIN\nTime of action: {b.time.iso8601()}')
 
         self._save()
 
