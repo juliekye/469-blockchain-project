@@ -349,9 +349,9 @@ class BlockChain:
         for i, b in enumerate(block_history):
             separator = '' if i == 0 else '\n'
             if not password:
-                print(separator + f'Case: {b.get_encrypted_uuid()}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601()}')
+                print(separator + f'Case: {b.get_encrypted_uuid()}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime of action: {b.time.iso8601()}')
             else:
-                print(separator + f'Case: {b.case_uuid or "00000000-0000-0000-0000-000000000000"}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601() if b.time else "0000-00-00T00:00:00.000000Z"}')
+                print(separator + f'Case: {b.case_uuid or "00000000-0000-0000-0000-000000000000"}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime of action: {b.time.iso8601() if b.time else "0000-00-00T00:00:00.000000Z"}')
     
     def verify(self) -> str:
         clean = True
@@ -360,14 +360,14 @@ class BlockChain:
         removed = set()
         prev = self.blocks[0]
         hashes.add(prev.sha_256_hash)
-        if prev.state == BlockState.DESTROYED:
+        if prev.state == BlockState.DESTROYED or prev.state == BlockState.DISPOSED or prev.state == BlockState.RELEASED:
             removed.add(prev.evidence_item_id)
         for b in self.blocks[1:]:
             if (b.state == BlockState.CHECKEDIN or b.state== BlockState.CHECKEDOUT) and b.evidence_item_id in removed:
                 msg = f'Bad Block: {b.case_uuid}\nItem checked out or checked in after removal from chain.'
                 clean = False
                 break
-            if b.state == BlockState.DESTROYED:
+            if b.state == BlockState.DESTROYED or b.state == BlockState.DISPOSED or b.state == BlockState.RELEASED:
                 removed.add(b.evidence_item_id)
 
             curr_hash = b.sha_256_hash
