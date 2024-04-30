@@ -17,14 +17,12 @@ from constants import AES_KEY, BCHOC_FILE_PATH, BCHOC_PASSWORD_CREATOR, Owner, g
 
 
 
-
-
 class BlockState(Enum):
     @staticmethod
     def from_name(name: str):
         m = {'INITIAL': BlockState.INITIAL, 'CHECKEDIN': BlockState.CHECKEDIN, 'CHECKEDOUT': BlockState.CHECKEDOUT,
               'DISPOSED': BlockState.DISPOSED, 'DESTROYED': BlockState.DESTROYED, 'RELEASED': BlockState.RELEASED}
-        return m.get(name, None)
+        return m.get(name.upper(), None)
 
     INITIAL = 'INITIAL'
     CHECKEDIN = 'CHECKEDIN'
@@ -37,136 +35,67 @@ class BlockState(Enum):
 
 class Block:
     def __init__(self) -> None:
-        self.sha_256_hash = None
+        self.sha_256_hash = b'\x00' * 32
         self.time = None
-        self.case_uuid = None
-        self.evidence_item_id = None
+        self.case_uuid = uuid.UUID(int=0)
+        self.evidence_item_id = 0
         self.state = BlockState.INITIAL
         self.creator = None
         self.owner = None
         self.data_length = 14
         self.data = "Initial block\x00"
-        
-        self.password: str = None
-        self.byte_data: bytes = self._to_bytes()
 
     @classmethod
     def from_bytes(cls, byte_data: bytes):
         block_instance = cls()
-        block_instance.byte_data = byte_data
 
         # Too little data
         if len(byte_data) < 144:
             exit(1)
         
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
-        block_instance.sha_256_hash = fields[0].hex() if fields[0] != b'\x00' * 32 else None
-        block_instance.time = maya.MayaDT(fields[1]) if fields[1] != b'\x00' * 8 else None
-        block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(fields[2])) if fields[2] != b'\x00' * 32 else None
-        block_instance.evidence_item_id = int.from_bytes(fields[3], byteorder='little', signed=False) if fields[3] != b'\x00' * 32 else None
-        block_instance.state = BlockState.from_name(fields[4].decode('utf-8').strip('\x00'))
-        block_instance.creator = fields[5].decode('utf-8').strip('\x00') if fields[5] != b'\x00' * 12 else None
-        block_instance.owner = Owner(fields[6].decode('utf-8').strip('\x00')) if fields[6] != b'\x00' * 12 else None
+        block_instance.sha_256_hash = fields[0]
+        block_instance.time = maya.MayaDT(fields[1]) if fields[1] != 0. else None
+        block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(fields[2]))
+
+        if fields[3] != b'\x00' * 32:
+            ev_id_bytes = bytes.fromhex(fields[3].decode('ascii'))
+            ev_id_bytes = cls.decrypt_data(ev_id_bytes)
+            ev_id = int.from_bytes(ev_id_bytes, 'big')
+
+        block_instance.evidence_item_id = ev_id if fields[3] != b'\x00' * 32 else 0
+
+        block_instance.state = BlockState.from_name(fields[4].decode().strip('\x00'))
+        block_instance.creator = fields[5].decode().strip('\x00') if fields[5] != b'\x00' * 12 else None
+        block_instance.owner = Owner(fields[6].decode().strip('\x00')) if fields[6] != b'\x00' * 12 else None
         block_instance.data_length = fields[7]
-        block_instance.data = byte_data[144:144 + block_instance.data_length].decode('utf-8')
+        block_instance.data = byte_data[144:144 + block_instance.data_length].decode()
         
         return block_instance
 
-    # @classmethod
-    # def from_bytes(cls, byte_data: bytes):
-    #     block_instance = cls()
-    #     block_instance.byte_data = byte_data
-
-    #     # Too little data
-    #     if len(byte_data) < 144:
-    #         exit(1)
-        
-    #     # Manually slice the bytes
-    #     offset = 0
-    #     previous_hash_bytes = byte_data[offset:offset+32]
-    #     offset += 32
-    #     timestamp_bytes = byte_data[offset:offset+8]
-    #     offset += 8
-    #     case_id_bytes = byte_data[offset:offset+32]
-    #     offset += 32
-    #     evidence_item_id_bytes = byte_data[offset:offset+32]
-    #     offset += 32
-    #     state_bytes = byte_data[offset:offset+12]
-    #     offset += 12
-    #     creator_bytes = byte_data[offset:offset+12]
-    #     offset += 12
-    #     owner_bytes = byte_data[offset:offset+12]
-    #     offset += 12
-    #     data_length_bytes = byte_data[offset:offset+4]
-    #     offset += 4
-        
-    #     # Convert bytes to the appropriate types
-    #     block_instance.sha_256_hash = previous_hash_bytes.hex() if previous_hash_bytes != b'\x00' * 32 else None
-    #     block_instance.time = maya.MayaDT(int.from_bytes(timestamp_bytes, byteorder='big', signed=False)) if timestamp_bytes != b'\x00' * 8 else None
-    #     block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(case_id_bytes)) if case_id_bytes != b'\x00' * 32 else None
-    #     block_instance.evidence_item_id = int.from_bytes(evidence_item_id_bytes, byteorder='little', signed=False) if evidence_item_id_bytes != b'\x00' * 32 else None
-    #     block_instance.state = BlockState[state_bytes.decode('utf-8').strip('\x00')]
-    #     block_instance.creator = creator_bytes.decode('utf-8').strip('\x00') if creator_bytes != b'\x00' * 12 else None
-    #     block_instance.owner = Owner[owner_bytes.decode('utf-8').strip('\x00')] if owner_bytes != b'\x00' * 12 else None
-    #     block_instance.data_length = int.from_bytes(data_length_bytes, byteorder='big')
-    #     block_instance.data = byte_data[offset:offset + block_instance.data_length].decode('utf-8')
-        
-    #     return block_instance
-
-    
     def __len__(self) -> int:
         return 144 + self.data_length
 
-    def _to_bytes(self) -> bytes:
+    def to_bytes(self) -> bytes:
         # Before packing, ensure that all None fields are appropriately handled.
         # For UUID and hashes, convert to bytes, for others use empty strings.
+        if self.evidence_item_id:
+            evd_id_bytes = self.evidence_item_id.to_bytes((self.evidence_item_id.bit_length() + 7) // 8, 'big')
+            evidence_hex = self.encrypt_data(evd_id_bytes).hex().encode('ascii')
+
         byte_data = struct.pack(
             '32s d 32s 32s 12s 12s 12s I',
-            (self.sha_256_hash.encode('utf-8') if isinstance(self.sha_256_hash, str) else self.sha_256_hash) if self.sha_256_hash else b'\x00' * 32,
-            self.time.epoch if self.time else 0,
+            self.sha_256_hash,
+            self.time.epoch if self.time else 0.0,
             self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'\x00' * 32,
-            self.evidence_item_id.to_bytes(32, byteorder='little', signed=False) if self.evidence_item_id else b'\x00' * 32,
-            self.state.name.encode('utf-8').ljust(12, b'\x00'),
-            self.creator.encode('utf-8').ljust(12, b'\x00') if self.creator else b'\x00' * 12,
-            self.owner.name.encode('utf-8').ljust(12, b'\x00') if self.owner else b'\x00' * 12,
+            evidence_hex if self.evidence_item_id else b'\x00' * 32,
+            self.state.name.encode().ljust(12, b'\x00'),
+            self.creator.encode().ljust(12, b'\x00') if self.creator else b'\x00' * 12,
+            self.owner.name.encode().ljust(12, b'\x00') if self.owner else b'\x00' * 12,
             self.data_length
         )
-        byte_data += self.data.encode('utf-8')  
+        byte_data += self.data.encode()  
         return byte_data
-        # previous_hash_bytes = self.sha_256_hash if self.sha_256_hash else b'\x00' * 32
-        # timestamp_bytes = bytearray(struct.pack('d', self.time.epoch)) if self.time else b'\x00' * 8
-        # case_id_bytes = self.encrypt_data(self.case_uuid) if self.case_uuid else b'\x00' * 32
-        # evidence_item_id_bytes = self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'\x00' * 32
-        # state_bytes = self.state.name.encode('utf-8').ljust(12, b'\x00')
-        # creator_bytes = self.creator.encode('utf-8').ljust(12, b'\x00') if self.creator else b'\x00' * 12
-        # owner_bytes = self.owner.name.encode('utf-8').ljust(12, b'\x00')  if self.owner else b'\x00' * 12
-        # data_length_bytes = len(self.data).to_bytes(4, 'big')
-        # data_bytes = self.data.encode('utf-8')
-
-        # # Concatenate all parts together
-        # packed_data = (
-        #     previous_hash_bytes +
-        #     timestamp_bytes +
-        #     case_id_bytes +
-        #     evidence_item_id_bytes +
-        #     state_bytes +
-        #     creator_bytes +
-        #     owner_bytes +
-        #     data_length_bytes +
-        #     data_bytes
-        # )
-
-        # return packed_data
-
-    
-
-    
-    def refresh(self):
-        """Every time a data is refreshed - this method shuold be called"""
-        self.byte_data = self._to_bytes()
-
-    def to_bytes(self):
-        return self.byte_data
 
     @staticmethod
     def encrypt_data(data: bytes) -> bytes:
@@ -240,7 +169,7 @@ class BlockChain:
             exit(1)
 
         # Verify password
-        if password.encode('utf-8') != BCHOC_PASSWORD_CREATOR:
+        if password.encode() != BCHOC_PASSWORD_CREATOR:
             print('Invalid password')
             exit(1)
 
@@ -258,14 +187,13 @@ class BlockChain:
         for i_id in item_ids:
             b = Block()
             b.sha_256_hash = self.blocks[-1].compute_hash()
-            b.password = password
-            b.case_uuid = uuid.UUID(case_id)
+            b.case_uuid = case_id
             b.evidence_item_id = i_id
             b.state = BlockState.CHECKEDIN
+            b.time = maya.now()
             b.creator = creator
-            b.data = "No data"
-            b.data_length = len(b.data)
-            b.refresh()
+            b.data = ""
+            b.data_length = 0
             self.blocks.append(b)
             print(f'Case: {b.case_uuid}\nItem: {b.evidence_item_id}\nAction: CHECKEDIN\nTime: {b.time.iso8601()}')
 
@@ -283,7 +211,7 @@ class BlockChain:
             exit(1)
 
         # Verify password
-        if password.encode('utf-8') != BCHOC_PASSWORD_CREATOR:
+        if password.encode() != BCHOC_PASSWORD_CREATOR:
             print('Invalid password')
             exit(1)
 
@@ -297,13 +225,19 @@ class BlockChain:
                     print('Block must be checked in!')
                     exit(1)
                 new_b = deepcopy(b)
-                new_b.state = BlockState.DESTROYED
+
+                if reason == 'DESTROYED':
+                    new_b.state = BlockState.DESTROYED
+                elif reason == 'DISPOSED':
+                    new_b.state = BlockState.DISPOSED
+                elif reason == 'RELEASED':
+                    new_b.state = BlockState.RELEASED
+
                 new_b.owner = get_owner(password)
                 new_b.time = maya.now()
-                new_b.data = f'Removed. Reason: {reason}'
+                new_b.data = f''
                 new_b.data_length = len(new_b.data)
                 new_b.sha_256_hash = self.blocks[-1].compute_hash()
-                new_b.refresh()
                 self.blocks.append(new_b)
                 self._save()
                 return print(f'Removed item: {item_id}\nStatus: DESTROYED\nTime of action: {new_b.time.iso8601()}')
@@ -332,7 +266,6 @@ class BlockChain:
                 new_b.state = BlockState.CHECKEDIN
                 new_b.owner = None
                 new_b.time = maya.now()
-                new_b.refresh()
                 self.blocks.append(new_b)
                 self._save()
                 
@@ -361,7 +294,6 @@ class BlockChain:
                 new_b.state = BlockState.CHECKEDOUT
                 new_b.owner = get_owner(password)
                 new_b.time = maya.now()
-                new_b.refresh()
                 self.blocks.append(new_b)
                 self._save()
                 
@@ -386,7 +318,7 @@ class BlockChain:
     def show_items(self, case_id):
         case_items = []
         for block in self.blocks:
-            if block.case_uuid == uuid.UUID(case_id) and not block.evidence_item_id in case_items:
+            if block.case_uuid == case_id and not block.evidence_item_id in case_items:
                 case_items.append(block.evidence_item_id)
 
         if case_items:
@@ -430,7 +362,7 @@ def parse_command_line():
 
     # Parser for the 'add' command
     parser_add = subparsers.add_parser('add', help='add a new item to the blockchain')
-    parser_add.add_argument('-c', '--case_id', required=True, help='Case ID')
+    parser_add.add_argument('-c', '--case_id', required=True, help='Case ID', type=uuid.UUID)
     parser_add.add_argument('-i', '--item_id', action='append', type=int, required=True, help='Item ID(s)')
     parser_add.add_argument('-g', '--creator', required=True, help="Creator's name")
     parser_add.add_argument('-p', '--password', help="Creator's password")
@@ -449,7 +381,6 @@ def parse_command_line():
     # Parser for the 'remove' command
     parser_remove = subparsers.add_parser('remove', help='Removes an item')
     parser_remove.add_argument('-i', '--item_id', type=int, required=True, help='Item ID')
-    #parser_remove.add_argument('-y', '--reason', help="Reason for removing an item")
     parser_remove.add_argument('-y', '--why', required=True, dest='reason', help="Reason for removing an item")
     parser_remove.add_argument('-p', '--password', help="Creator's Password")
 
@@ -462,11 +393,11 @@ def parse_command_line():
 
     #parser for show items
     parser_show_items = show_subparsers.add_parser('items', help='Show all items')
-    parser_show_items.add_argument('-c', '--case_id', help="Case ID", type=str)
+    parser_show_items.add_argument('-c', '--case_id', help="Case ID", type=uuid.UUID)
 
     #parser for show history
     parser_history = show_subparsers.add_parser('history', help='Show the history of a case or an item')
-    parser_history.add_argument('-c', '--case_id', help="Case ID", type=str)
+    parser_history.add_argument('-c', '--case_id', help="Case ID", type=uuid.UUID)
     parser_history.add_argument('-i', '--item_id', help="Item ID", type=int)
     parser_history.add_argument('-n', '--num_entries', type=int, help="Number of entries to show")
     parser_history.add_argument('-r', '--reverse', action='store_true', help="Reverse the order of entries")
