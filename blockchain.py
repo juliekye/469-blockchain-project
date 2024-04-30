@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 
 import argparse
-from copy import deepcopy
 import hashlib
 import os
-import traceback
+import sys
 import uuid
 import maya
 import struct
 
 from enum import Enum
+from copy import deepcopy
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
@@ -37,7 +37,7 @@ class Block:
     def __init__(self) -> None:
         self.sha_256_hash = b'\x00' * 32
         self.time = None
-        self.case_uuid = uuid.UUID(int=0)
+        self.case_uuid = None
         self.evidence_item_id = 0
         self.state = BlockState.INITIAL
         self.creator = None
@@ -52,18 +52,25 @@ class Block:
         # Too little data
         if len(byte_data) < 144:
             exit(1)
+
+        print('\nBlock data:\n', file=sys.stderr)
+        hex_string = ' '.join(f"{byte:02x}" for byte in byte_data[:144])
+        ascii_string = ''.join(chr(byte) if 32 <= byte <= 127 else '.' for byte in byte_data[:144])
+        print(hex_string, file=sys.stderr)
+        print(ascii_string, file=sys.stderr)
+        print('=' * 10 + '\n', file=sys.stderr)
         
         fields = struct.unpack('32s d 32s 32s 12s 12s 12s I', byte_data[:144])  # Unpacking till Data Length
         block_instance.sha_256_hash = fields[0]
         block_instance.time = maya.MayaDT(fields[1]) if fields[1] != 0. else None
-        block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(fields[2]))
+        block_instance.case_uuid = uuid.UUID(bytes=cls.decrypt_data(fields[2])) if fields[2] != b'0' * 32 else None
 
-        if fields[3] != b'\x00' * 32:
+        if fields[3] != b'0' * 32:
             ev_id_bytes = bytes.fromhex(fields[3].decode('ascii'))
             ev_id_bytes = cls.decrypt_data(ev_id_bytes)
             ev_id = int.from_bytes(ev_id_bytes, 'big')
 
-        block_instance.evidence_item_id = ev_id if fields[3] != b'\x00' * 32 else 0
+        block_instance.evidence_item_id = ev_id if fields[3] != b'0' * 32 else 0
 
         block_instance.state = BlockState.from_name(fields[4].decode().strip('\x00'))
         block_instance.creator = fields[5].decode().strip('\x00') if fields[5] != b'\x00' * 12 else None
@@ -87,8 +94,8 @@ class Block:
             '32s d 32s 32s 12s 12s 12s I',
             self.sha_256_hash,
             self.time.epoch if self.time else 0.0,
-            self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'\x00' * 32,
-            evidence_hex if self.evidence_item_id else b'\x00' * 32,
+            self.encrypt_data(self.case_uuid.bytes) if self.case_uuid else b'0' * 32,
+            evidence_hex if self.evidence_item_id else b'0' * 32,
             self.state.name.encode().ljust(12, b'\x00'),
             self.creator.encode().ljust(12, b'\x00') if self.creator else b'\x00' * 12,
             self.owner.name.encode().ljust(12, b'\x00') if self.owner else b'\x00' * 12,
@@ -431,7 +438,7 @@ def parse_command_line():
     elif args.command == 'verify':
         blockchain.verify()
     elif args.command == 'add':
-        if msg == 'Blockchain file not found. Created INITIAL block.': print(msg)
+        # if msg == 'Blockchain file not found. Created INITIAL block.': print(msg)
         blockchain.add(args.case_id, args.item_id, args.creator, args.password)
     elif args.command == 'checkin':
         blockchain.checkin(args.item_id, args.password)
