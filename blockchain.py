@@ -128,6 +128,7 @@ class Block:
         return hashlib.sha256(self.to_bytes()).digest()
     
     def get_encrypted_uuid(self):
+        if not self.case_uuid: return "00000000-0000-0000-0000-000000000000"
         return self.encrypt_data(self.case_uuid.bytes).hex()
     
 
@@ -232,14 +233,13 @@ class BlockChain:
                 elif reason == 'RELEASED':
                     new_b.state = BlockState.RELEASED
 
-                new_b.owner = get_owner(password)
                 new_b.time = maya.now()
                 new_b.data = f''
                 new_b.data_length = len(new_b.data)
                 new_b.sha_256_hash = self.blocks[-1].compute_hash()
                 self.blocks.append(new_b)
                 self._save()
-                return print(f'Removed item: {item_id}\nStatus: DESTROYED\nTime of action: {new_b.time.iso8601()}')
+                return print(f'Removed item: {item_id}\nStatus: {new_b.state.value}\nTime of action: {new_b.time.iso8601()}')
             
 
     def checkin(self, item_id, password):
@@ -339,15 +339,19 @@ class BlockChain:
             for b in self.blocks:
                 if b.evidence_item_id == item_id:
                     block_history.append(b)
+        else:
+            block_history = self.blocks
+
         if num_entries:
             block_history = block_history[:num_entries]
         if reverse:
             block_history = block_history[::-1]
-        for b in block_history:
+        for i, b in enumerate(block_history):
+            separator = '' if i == 0 else '\n'
             if not password:
-                print(f'Case: {b.get_encrypted_uuid()}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601()}')
+                print(separator + f'Case: {b.get_encrypted_uuid()}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601()}')
             else:
-                print(f'Case: {b.case_uuid}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601()}')
+                print(separator + f'Case: {b.case_uuid or "00000000-0000-0000-0000-000000000000"}\nItem: {b.evidence_item_id}\nAction: {b.state.name}\nTime: {b.time.iso8601() if b.time else "0000-00-00T00:00:00.000000Z"}')
     
     def verify(self) -> str:
         clean = True
